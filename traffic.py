@@ -4,7 +4,6 @@ import pandas as pd
 import pickle
 from mapie.regression import MapieRegressor
 import warnings
-import plotly.graph_objects as go
 import numpy as np
 warnings.filterwarnings('ignore')
 
