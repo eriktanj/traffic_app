@@ -126,7 +126,7 @@ if traffic_file is None:
     st.header(":green[**Predicting Traffic Volume...**]",)
     with st.container(border=True):
         st.write("Predicted Traffic Volume")
-        st.header("${:,.2f}".format(y_mean))
+        st.header("{:,.2f}".format(y_mean))
     st.write("**Prediction Interval {}%**: [{:,.2f}, {:,.2f}]".format(int((1-a)*100), y_lower, y_upper))
 
 else:
