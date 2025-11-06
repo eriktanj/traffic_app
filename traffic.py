@@ -15,9 +15,14 @@ st.write("Utilize our advanced Machine Learning application to predict traffic v
 st.image('traffic_image.gif', width = 1000)
 
 # Load the pre-trained model from the pickle file
-xg_pickle = open('xg_traffic.pickle', 'rb') 
-xg = pickle.load(xg_pickle) 
-xg_pickle.close()
+@st.cache_resource
+def load_model():
+    xg_pickle = open('xg_traffic.pickle', 'rb') 
+    xg = pickle.load(xg_pickle) 
+    xg_pickle.close()
+    return xg
+
+xg = load_model()
 
 # Create a sidebar for input collection
 st.sidebar.image('traffic_sidebar.jpg', width = 500, caption = 'Traffic Volume Predictor')
@@ -31,18 +36,27 @@ with st.sidebar.expander('Option 1: Upload CSV File'):
     st.write('Upload a CSV file containing traffic details.')
     traffic_file = st.file_uploader('Choose a CSV file')
     st.subheader('Sample Data for Upload')
-    st.write(pd.read_csv('traffic_data_user.csv').head(5))
+    st.cache_data
+    def load_sample_data():
+        return pd.read_csv('traffic_data_user.csv').head(5)
+    st.write(load_sample_data())
     st.warning('Ensure your uploaded file has the same column names and data types as shown above.')
 
 # Option 2: Asking users to input their data using a form in the sidebar
 with st.sidebar.expander('Option 2: Fill Out Form'):
     st.write('Enter the traffic details manually using the form below.')
-    default_df = pd.read_csv('Traffic_Volume.csv')
-    default_df['date_time'] = pd.to_datetime(default_df['date_time'])
-    default_df['month'] = default_df['date_time'].dt.month_name()
-    default_df['weekday'] = default_df['date_time'].dt.day_name()
-    default_df['hour'] = default_df['date_time'].dt.hour
-    default_df = default_df.drop('date_time', axis=1)
+    
+    @st.cache_data
+    def load_default_data():
+        default_df = pd.read_csv('Traffic_Volume.csv')
+        default_df['date_time'] = pd.to_datetime(default_df['date_time'])
+        default_df['month'] = default_df['date_time'].dt.month_name()
+        default_df['weekday'] = default_df['date_time'].dt.day_name()
+        default_df['hour'] = default_df['date_time'].dt.hour
+        default_df = default_df.drop('date_time', axis=1)
+        return default_df
+    
+    default_df = load_default_data()
     
     holiday = st.selectbox(
     "Choose whether today is a designated holiday or not",
@@ -91,20 +105,34 @@ with st.sidebar.expander('Option 2: Fill Out Form'):
          
     button = st.button('Submit Form Data')
 
+if button:
+    st.session_state['form_submitted'] = True
+    st.session_state['form_data'] = {
+        'holiday': holiday,
+        'temp': temp,
+        'rain_1h': rain_1h,
+        'snow_1h': snow_1h,
+        'clouds_all': clouds_all,
+        'weather_main': weather_main,
+        'month': month,
+        'weekday': weekday,
+        'hour': hour
+    }
 
 # If no file is provided, then allow user to provide inputs using the form
-if traffic_file is None and not button:
+if traffic_file is None and 'form_submitted' not in st.session_state:
     st.badge("Please choose a data input method to proceed.", color="blue")
-if button:
+
+elif 'form_submitted' in st.session_state:
     st.success("Form data submitted successfully.")
-if traffic_file is None:
     # Encode the inputs for model prediction
     a = st.slider("Select alpha value for estimating prediction intervals", min_value=0.01, max_value=0.50, value=0.05, step=0.01)
     encode_df = default_df.copy()
     encode_df = encode_df.drop(columns = ['traffic_volume'])
 
     # Combine the list of user data as a row to default_df
-    encode_df.loc[len(encode_df)] = [holiday, temp, rain_1h, snow_1h, clouds_all, weather_main, month, weekday, hour]
+    form_data = st.session_state['form_data']
+    encode_df.loc[len(encode_df)] = [form_data['holiday'], form_data['temp'], form_data['rain_1h'], form_data['snow_1h'], form_data['clouds_all'], form_data['weather_main'], form_data['month'], form_data['weekday'], form_data['hour']]
     encode_df['holiday'] = encode_df['holiday'].apply(lambda x: 1 if x != 'None' else 0)
 
     # Create dummies for encode_df
@@ -129,23 +157,25 @@ if traffic_file is None:
         st.header("{:,.2f}".format(y_mean))
     st.write("**Prediction Interval {}%**: [{:,.2f}, {:,.2f}]".format(int((1-a)*100), y_lower, y_upper))
 
-else:
+elif traffic_file is not None:
    # Loading data
    user_df = pd.read_csv(traffic_file) # User provided data
-   original_df = pd.read_csv('Traffic_Volume.csv') # Original data to create ML model
+   
+   @st.cache_data
+   def load_original_data():
+       original_df = pd.read_csv('Traffic_Volume.csv') # Original data to create ML model
+       original_df['holiday'] = original_df['holiday'].apply(lambda x: 1 if x != 'None' else 0)
+       original_df['date_time'] = pd.to_datetime(original_df['date_time'])
+       original_df['month'] = original_df['date_time'].dt.month_name()
+       original_df['weekday'] = original_df['date_time'].dt.day_name()
+       original_df['hour'] = original_df['date_time'].dt.hour
+       original_df = original_df.drop('date_time', axis=1)
+       original_df = original_df.drop(columns = ['traffic_volume'])
+       return original_df
+   
+   original_df = load_original_data()
    st.success("CSV file uploaded successfully.")
    a = st.slider("Select alpha value for estimating prediction intervals", min_value=0.01, max_value=0.50, value=0.05, step=0.01)
-
-   original_df['holiday'] = original_df['holiday'].apply(lambda x: 1 if x != 'None' else 0)
-
-   original_df['date_time'] = pd.to_datetime(original_df['date_time'])
-   original_df['month'] = original_df['date_time'].dt.month_name()
-   original_df['weekday'] = original_df['date_time'].dt.day_name()
-   original_df['hour'] = original_df['date_time'].dt.hour
-   original_df = original_df.drop('date_time', axis=1)
-
-   # Remove output (traffic_volume) column from original data
-   original_df = original_df.drop(columns = ['traffic_volume'])
 
    # Ensure the order of columns in user data is in the same order as that of original data
    user_df = user_df[original_df.columns]
